@@ -112,62 +112,43 @@
 #! -----------------------------------------------------------------------------
 
 
-(define start-conversion
-  (lambda (file)
-    (let ([nfa (parser file)])
-      (convert nfa '() (list (e-closure nfa (find-initial-state nfa))) '())
-      )
-  )
+(define getFirstE 
+  (lambda (nfa)
+     (build-table (cadr (assoc 'E (cadr (assoc (cadr (assoc 'initial (car nfa))) nfa)))) '())
+    
+    )
   )
 
-(define convert
-  (lambda (nfa dfa stack set_dict)
-   (if(empty? stack)  ; check, is stack empty? empty means, stack = '(), if so, return dfa that has been made pretty, else mark top of stack
-         (transform-dfa nfa dfa set_dict)
-    (let ([marked_moves (mark nfa (car stack))]) ;turn into a queue and move down it
-      (let ([add_marks (add-marks-to-dict marked_moves set_dict)])
-         (convert
-               nfa
-               (append dfa (list (cons (car stack) (list marked_moves))))
-               (update-queue stack add_marks) ;add new items to the queue while taking the item you just marked off
-               (append set_dict (generate-marks add_marks))
-               ; stack -> (pop stack), concat new sets retrieved rom marked_moves ("new" means, not in set_dict) -> if a on stack, pop a, mark a get b c from marking, push list on stack
-               ; set_dict -> new sets retrieved from marked_moves   
-            )
-        )
-      )
-    )
-    )
-  )
-  
+;(define convert
+;  (lambda (nfa dfa stack set_dict)
+;   (if(empty? stack)  ; check, is stack empty? empty means, stack = '(), if so, return dfa that has been made pretty, else mark top of stack
+;         (transform-dfa nfa dfa set_dict)
+;    (let ([marked_moves (mark nfa (car stack))]) ;turn into a queue and move down it
+;      (let ([add_marks (add-marks-to-dict marked_moves set_dict)])
+;         (convert
+;               nfa
+;               (append dfa (cons gensym marked_moves))
+;               (stack) ;add new items to the queue while taking the item you just marked off
+;               (append set_dict (generate-marks add_marks))
+;               ; stack -> (pop stack), concat new sets retrieved rom marked_moves ("new" means, not in set_dict) -> if a on stack, pop a, mark a get b c from marking, push list on stack
+;               ; set_dict -> new sets retrieved from marked_moves
+;     
+;      
+;      
+;          )
+;    )
+;  )
+;  ))
+;  )
+;  )
 ;need to think of way to check if not in dictionary and if not add to dictinary and to stack
 
-
-#! Finds the initial state of the NFA
-(define find-initial-state
-  (lambda (nfa)
-    (cdr (assoc 'initial (car nfa)))
-    )
-  )
-
-#! Reorganizes Queue for Stack - pops the top and queues others to back 
-;Must recieve list of lists '( () () )
-(define update-queue
-  (lambda (stack queue)
-    (append (cdr stack) queue)
-    )
-  )
-     
-
-
 #! Creates a list of moves not found in the set_dict
-;takes in list of lists '( () () )
-;returns list of lists '( () () )
 (define add-marks-to-dict
   (lambda (moves set)
     (foldr (lambda (move l)
              (if (not-in-dict move set)
-                 (cons  (caadr move) l)
+                 (cons (cons gensym (list (caadr move))) l)
                  l
                  )
              ) '() moves)
@@ -176,26 +157,19 @@
   )
 
 #! Generates a key-value pair for each mark to be appeneded to the set_dict
-;takes a list of lists '( () () ) returns list of pairs
-;'((4 8 9 11) (5 6 7 11))
-; =====>
-;'(((4 8 9 11) . #<procedure:gensym>) ((5 6 7 11) . #<procedure:gensym>))
-(define generate-marks
+(define generate_marks
   (lambda (marks)
-    (map (lambda (mark)
-           (cons mark (gensym))
-           ) marks)
+    '()
     )
   )
 
 
 
-#! Mark is not already in dictoinary
-
+#! Mark is not already in dictoinary 
  (define not-in-dict
    (lambda (move set)
      (andmap (lambda (set_item)
-               (not (compare-lists (caadr move) (car set_item))) ;(given as '() . procdedure) need to fix
+               (not (compare-lists (caadr move) (cadr set_item)))
                )
              set)
      )
@@ -204,7 +178,7 @@
   
 (define transform-dfa
   (lambda (nfa dfa set_dict)
-    (append (car nfa) dfa )
+    dfa
     )
   )
 
@@ -212,15 +186,11 @@
 
 
 #! Marks the sets
-; takes in a list of numbers '(2 3 4)
-;
 (define mark
   (lambda (nfa set)
     (foldr (lambda (alpha marking) 
-             (let ([moves (get-moves set nfa alpha)])
-                    (cons (list alpha (cons (e-closure nfa moves) (list moves))) marking)
-             )
-             )
+                    (cons (list alpha (cons (e-closure nfa (get-moves set nfa alpha)) (list (get-moves set nfa alpha)))) marking)
+             )  
            '() (remove 'E (cadr (assoc 'alpha (car nfa))))
            )
     )
@@ -229,12 +199,10 @@
 #! Get E-Closure moves
 (define e-closure
   (lambda (nfa set)
-    (let ([e (append set (get-moves set nfa 'E))])
-    (if(compare-lists set (remove-duplicates e))
+    (if(compare-lists set (remove-duplicates (append set (get-moves set nfa 'E))))
        (sort set <)
-       (e-closure nfa (remove-duplicates e))
+       (e-closure nfa (remove-duplicates (append set (get-moves set nfa 'E))))
        )
-    )
     )
   )
      
@@ -246,7 +214,7 @@
              (foldr (lambda (state out)
                         (cons state out)
                          )
-                      output (cadr (assoc alpha (cadr (assoc state nfa))))
+                      output (cadr (assoc alpha (car (assoc state nfa))))
                       )
                     
              )
@@ -328,97 +296,7 @@
 #! -----------------------------------------------------------------------------
 #! -----------------------------------------------------------------------------
 
-#! Construcs a dictionary for mark replacement
-;takes in dfa returns list of pairs ( ((e-closure) new-mark) ... )
 
-;(define final-dfa
-;  (lambda (file)
-;    (let ([dfa (start-conversion file)])
-;      (let ([set_dict (build-set-dict (cddddr dfa) '() 1)])
-;        (print-transitions dfa set_dict)
-;        )
-;      )
-;    )
-;  )
-
-(define print-transitions
-  (lambda (dfa set_dict)
-    (map (lambda (line)
-        (print-mark (car dfa) set_dict) ;;will have to loop on items after that for each move in alpha
-           (map (lambda (move)
-            (print-move (car line) (caar move) (car (cdadar move)))
-            (print-eclosure (car (cdadar move)) (caadr (cadr move)) (input-mark (cadr (cadr move)) set_dict))
-            ) (cadr line))
-           
-           ) dfa )
-    )
-  )
-
-(define subst
-  (lambda (line sect_dic)
-    dfa ;will need to substitute all sect_dict values into this. then print-transitions will return the final dfa - then complete printer for final dfa
-    )
-  )
-
-
-#! Prints Mark 'x': statement
-(define print-mark
-  (lambda (dfa set_dict)
-    (display (string-append "Mark " (number->string (input-mark dfa set_dict)) ":"))
-    )
-  )
-#! Prints E-closure -- alpha --> move line
-(define print-move
-  (lambda (start alpha move)
-    (display (string-append (list-to-string start) (print-letter alpha) (list-to-string move)))
-    )
-  )
-
-#! Prints E-closure = e-closure -> mark
-(define print-eclosure
-  (lambda (move eclosure id)
-    (display (string-append "E-Closure" (list-to-string move) " = " (list-to-string eclosure) "->" (number->string id)))
-    )
-  )
-
-#! Converts a list into a string  
-(define list-to-string
-  (lambda (l)
-  (string-append (foldr (lambda (num str)
-           (string-append str (number->string num) " ")
-            ) "{ " (reverse l)) "}"
-         )
-    )
-  )
-
-#! Prints -- alpha -- >
-(define print-letter
-  (lambda (alpha)
-    (string-append (string-append " --" (symbol->string alpha)) "--> ")
-    )
-  )
-
- 
-(define input-mark
-  (lambda (dfa set_dict)
-    (if(compare-lists (car dfa) (caar set_dict))
-       (cadar set_dict)
-       (input-mark dfa (cdr set_dict))
-       )
-    )
-  )
-
-(define build-set-dict
-  (lambda (dfa set num)
-    (if (empty? dfa)
-        set
-        (if(empty? (caar dfa))
-           (build-set-dict (cdr dfa) set (+ 1 num))
-           (cons (list (caar dfa) num) (build-set-dict (cdr dfa) set (+ 1 num)))
-        )
-    )
-    )
-  )
 
 
 
@@ -447,25 +325,4 @@
 ;(mark (parser "/home/mteahan/Programming/EECS_665/Project1/test.txt") '(2 3 9))
 ;  (get-moves '(1 2 6) (parser "/home/mteahan/Programming/EECS_665/Project1/test.txt") 'a )
 ;(moves '(1 2 6) (parser "/home/mteahan/Programming/EECS_665/Project1/test.txt") '() '())
-; (add-marks-to-dict '((b ((4 8 9 11) (4))) (a ((5 6 7 11) (4)))) '((b (3 9 10 11)) (a (4 8 90 11))))
-;(cadr (assoc '9 (parser "/home/mteahan/Programming/EECS_665/Project1/test.txt")))
-;(start-conversion "/home/mteahan/Programming/EECS_665/Project1/test.txt")
-;(build-set-dict '(((1 2 5) ((a ((3) (3))) (b ((6) (6)))))
-;  ((3) ((a (() ())) (b ((4 8 9 11) (4)))))
-;  ((6) ((a ((7 8 9 11) (7))) (b (() ()))))
-;  (() ((a (() ())) (b (() ()))))
-;  ((4 8 9 11) ((a ((9 10 11) (10))) (b (() ()))))
-;  ((7 8 9 11) ((a ((9 10 11) (10))) (b (() ()))))
-;  ((9 10 11) ((a ((9 10 11) (10))) (b (() ()))))) '() 1)
-
-;(print-mark '((1 2 5) ((a ((3) (3))) (b ((6) (6))))) '(((1 2 5) 1) ((3) 2) ((6) 3) ((4 8 9 11) 5) ((7 8 9 11) 6) ((9 10 11) 7)))
-;(list-to-string '(1 2 3 4))
-
-(print-transitions '(((1 2 5) ((a ((3) (3))) (b ((6) (6)))))
-  ((3) ((a (() ())) (b ((4 8 9 11) (4)))))
-  ((6) ((a ((7 8 9 11) (7))) (b (() ()))))
-  (() ((a (() ())) (b (() ()))))
-  ((4 8 9 11) ((a ((9 10 11) (10))) (b (() ()))))
-  ((7 8 9 11) ((a ((9 10 11) (10))) (b (() ()))))
-  ((9 10 11) ((a ((9 10 11) (10))) (b (() ())))))
-'(((1 2 5) 1) ((3) 2) ((6) 3) ((4 8 9 11) 5) ((7 8 9 11) 6) ((9 10 11) 7)))
+ (add-marks-to-dict '((b ((4 8 9 11) (4))) (a ((5 6 7 11) (4)))) '((b (3 9 10 11)) (a (4 8 90 11))))
