@@ -1,0 +1,328 @@
+#lang plai
+(require racket/trace)
+
+#! -----------------------------------------------------------------------------
+#! -----------------------------------------------------------------------------
+#! --------------------  BEGIN PARSER/STRUCTURE CREATION    --------------------
+#! -----------------------------------------------------------------------------
+#! -----------------------------------------------------------------------------
+
+ #! Pass in file which stores NFA information. Will build structure for NFA information                             
+ (define parser
+   (lambda (file)
+     (strings-to-list (file->lines file))
+     )
+   )
+
+#! Takes the list of strings/lines from the file and breaks down those strings into list of elements in the string => a list of lists
+(define strings-to-list
+  (lambda (list_of_file)
+    (create-structure (foldr structure-for-info '() (take (map string-split list_of_file) 4))  (map string-split list_of_file))
+    )
+  )
+
+#! Creates a structure with NFA information
+#! stores Initial, Total, etc.. at front and states further down as an associative list
+(define create-structure 
+  (lambda (info_structure input)
+    (cons info_structure (structure-for-states info_structure (cddddr input)))
+    )
+  )
+
+#! Creates the associative list structure for the states of the NFA
+(define structure-for-states
+  (lambda (info input)
+    (foldr (lambda (lines nfa) 
+             (cons (cons (string->number (car lines)) (list (match-moves (cdr lines) (cadr (assoc 'alpha info)))))  nfa))
+             
+           '() input)
+    )
+  )
+  
+#! Takes alphabet and matches it with each move
+#! Practice with: (match-moves '("{2,3}" "{}" "{3}") '('a 'b 'c))
+(define match-moves
+  (lambda (line alpha)
+    (if (empty? alpha) '()
+        (cons (cons (car alpha) (convert-moves (car line))) (match-moves (cdr line) (cdr alpha)))
+        )
+    )
+  )
+  
+#! Converts string of moves into multiple strings/move items
+(define convert-moves
+  (lambda (moves)
+    (list (moves-to-symbol (string-split (substring moves 1 (- (string-length moves) 1)) ",")))
+    )
+  )
+
+#! Converts individual strings into symbols
+(define moves-to-symbol
+  (lambda (moves)
+    (if (empty? moves) '()
+        (cons (string->number (car moves)) (moves-to-symbol (cdr moves)))
+        )
+    )
+  )
+
+#! Creates associative list structure for NFA Info
+(define structure-for-info
+  (lambda (lines nfa)
+    (case (car lines)
+      (("Initial") (cons (list 'initial (car (convert-info (last lines)))) nfa))
+      (("Final") (cons (list 'final (convert-info (last lines))) nfa))
+      (("Total") (cons (list 'total (string->number (last lines))) nfa))
+      (("State") (cons (list 'alpha (convert-alpha (cdr lines))) nfa))
+      )
+    )
+  )
+
+#! Converts list of Alphabet strings into list of symbols
+(define convert-alpha
+  (lambda (alphabet)
+    (if (empty? alphabet) '()
+        (cons (string->symbol (car alphabet)) (convert-alpha (cdr alphabet)))
+        )
+    )
+  )
+
+#! Converts string of info into actual symbol list
+(define convert-info
+  (lambda (line)
+    (foldr get-nums '() (string-split (substring line 1 (- (string-length line) 1)) ","))
+    )
+  )
+
+#! Converst string of a number into a symbol
+(define get-nums
+  (lambda (input nums)
+    (cons (string->number input) nums))
+      )
+
+#! -----------------------------------------------------------------------------
+#! -----------------------------------------------------------------------------
+#! --------------------  END PARSER/STRUCTURE CREATION      --------------------
+#! -----------------------------------------------------------------------------
+#! -----------------------------------------------------------------------------
+
+#! -----------------------------------------------------------------------------
+#! -----------------------------------------------------------------------------
+#! --------------------  BEGIN NFA to DFA CONVERSION        --------------------
+#! -----------------------------------------------------------------------------
+#! -----------------------------------------------------------------------------
+
+
+(define getFirstE 
+  (lambda (nfa)
+     (build-table (cadr (assoc 'E (cadr (assoc (cadr (assoc 'initial (car nfa))) nfa)))) '())
+    
+    )
+  )
+
+;(define convert
+;  (lambda (nfa dfa stack set_dict)
+;   (if(empty? stack)  ; check, is stack empty? empty means, stack = '(), if so, return dfa that has been made pretty, else mark top of stack
+;         (transform-dfa nfa dfa set_dict)
+;    (let ([marked_moves (mark nfa (car stack))]) ;turn into a queue and move down it
+;      (let ([add_marks (add-marks-to-dict marked_moves set_dict)])
+;         (convert
+;               nfa
+;               (append dfa (cons gensym marked_moves))
+;               (stack) ;add new items to the queue while taking the item you just marked off
+;               (append set_dict (generate-marks add_marks))
+;               ; stack -> (pop stack), concat new sets retrieved rom marked_moves ("new" means, not in set_dict) -> if a on stack, pop a, mark a get b c from marking, push list on stack
+;               ; set_dict -> new sets retrieved from marked_moves
+;     
+;      
+;      
+;          )
+;    )
+;  )
+;  ))
+;  )
+;  )
+;need to think of way to check if not in dictionary and if not add to dictinary and to stack
+
+#! Creates a list of moves not found in the set_dict
+(define add-marks-to-dict
+  (lambda (moves set)
+    (foldr (lambda (move l)
+             (if (not-in-dict move set)
+                 (cons (cons gensym (list (caadr move))) l)
+                 l
+                 )
+             ) '() moves)
+             
+    )
+  )
+
+#! Generates a key-value pair for each mark to be appeneded to the set_dict
+(define generate_marks
+  (lambda (marks)
+    '()
+    )
+  )
+
+
+
+#! Mark is not already in dictoinary 
+ (define not-in-dict
+   (lambda (move set)
+     (andmap (lambda (set_item)
+               (not (compare-lists (caadr move) (cadr set_item)))
+               )
+             set)
+     )
+   )
+      
+  
+(define transform-dfa
+  (lambda (nfa dfa set_dict)
+    dfa
+    )
+  )
+
+  
+
+
+#! Marks the sets
+(define mark
+  (lambda (nfa set)
+    (foldr (lambda (alpha marking) 
+                    (cons (list alpha (cons (e-closure nfa (get-moves set nfa alpha)) (list (get-moves set nfa alpha)))) marking)
+             )  
+           '() (remove 'E (cadr (assoc 'alpha (car nfa))))
+           )
+    )
+  )
+     
+#! Get E-Closure moves
+(define e-closure
+  (lambda (nfa set)
+    (if(compare-lists set (remove-duplicates (append set (get-moves set nfa 'E))))
+       (sort set <)
+       (e-closure nfa (remove-duplicates (append set (get-moves set nfa 'E))))
+       )
+    )
+  )
+     
+
+#! Get all moves for states at particular alphabet letter
+(define get-moves
+  (lambda (state_list nfa alpha)
+    (remove-duplicates (foldr (lambda (state output)
+             (foldr (lambda (state out)
+                        (cons state out)
+                         )
+                      output (cadr (assoc alpha (car (assoc state nfa))))
+                      )
+                    
+             )
+             '() state_list)
+    ))
+  )
+
+#! Checks to make sure state doesn't exist in list of moves
+(define not-in-list 
+  (lambda (state list)
+    (andmap (lambda (l)
+              (if (= state l)
+                  false
+                  true
+                  )
+              ) list
+            )
+    )
+  )
+
+
+
+#! Checks to Mark in Table -- returns 0, if it doesn't exist
+(define check-e-closure
+  (lambda (closure table)
+    (if(empty? table)  0
+    (if (compare-lists closure (cadar table))
+        (caar table)
+        (check-e-closure closure (cdr table))
+        )
+    )
+  )
+  )
+
+#! Compare E-Closure elements to make sure it doesn't exist in table
+(define compare-lists
+  (lambda (l1 l2)
+    (equal? (sort l1 <) (sort l2 <))
+    )
+  )
+    
+         
+#! Adds E-Closure to the table and the Mark Associated with it
+(define build-table
+  (lambda (closure table)
+    (cons (cons (+ 1 (length table)) (list closure)) table)
+    )
+  )
+           
+; #! Converts a Number into a Symbol
+; (define number->symbol
+;   (lambda (num)
+;     (string->symbol(number->string num))
+;   )
+;  )
+;#! Converst list of the states into a Symbol
+; (define convert-list-to-symbol
+;   (lambda (l)
+;     (string->symbol (foldr (lambda (item string)
+;              (string-append string (symbol->string item))
+;              )
+;            "" l)
+;     )
+;   )
+;  )
+   
+#! (equal? (sort '(3 2 1 4 5) <) (sort '(2 1 3 4 5) <))
+
+#! -----------------------------------------------------------------------------
+#! -----------------------------------------------------------------------------
+#! --------------------  END NFA to DFA CONVERSION        --------------------
+#! -----------------------------------------------------------------------------
+#! -----------------------------------------------------------------------------
+
+
+#! -----------------------------------------------------------------------------
+#! -----------------------------------------------------------------------------
+#! --------------------       BEGIN DFA PRINTING            --------------------
+#! -----------------------------------------------------------------------------
+#! -----------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#! -----------------------------------------------------------------------------
+#! -----------------------------------------------------------------------------
+#! --------------------         END DFA PRINTING            --------------------
+#! -----------------------------------------------------------------------------
+#! -----------------------------------------------------------------------------
+
+
+
+   #!  (trace strings-to-list)
+ #! (parser "/home/mteahan/Programming/EECS_665/Project1/test.txt")
+ ;(e-closure (parser "/home/mteahan/Programming/EECS_665/Project1/test.txt") '(1))
+;(mark (parser "/home/mteahan/Programming/EECS_665/Project1/test.txt") '(2 3 9))
+;  (get-moves '(1 2 6) (parser "/home/mteahan/Programming/EECS_665/Project1/test.txt") 'a )
+;(moves '(1 2 6) (parser "/home/mteahan/Programming/EECS_665/Project1/test.txt") '() '())
+ (add-marks-to-dict '((b ((4 8 9 11) (4))) (a ((5 6 7 11) (4)))) '((b (3 9 10 11)) (a (4 8 90 11))))
