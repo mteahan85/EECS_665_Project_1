@@ -1,5 +1,13 @@
-#lang plai
+; Megan Teahan
+; EECS 665
+; Assignment 1
+; nfa2dfa – Subset construction to convert NFA to DFA
+#lang racket
 (require racket/trace)
+(require 2htdp/batch-io)
+
+
+
 
 #! -----------------------------------------------------------------------------
 #! -----------------------------------------------------------------------------
@@ -7,10 +15,10 @@
 #! -----------------------------------------------------------------------------
 #! -----------------------------------------------------------------------------
 
- #! Pass in file which stores NFA information. Will build structure for NFA information                             
+ #! Pass in list of info from file. Will build structure for NFA information                             
  (define parser
    (lambda (file)
-     (strings-to-list (file->lines file))
+     (strings-to-list file)
      )
    )
 
@@ -40,7 +48,6 @@
   )
   
 #! Takes alphabet and matches it with each move
-#! Practice with: (match-moves '("{2,3}" "{}" "{3}") '('a 'b 'c))
 (define match-moves
   (lambda (line alpha)
     (if (empty? alpha) '()
@@ -86,14 +93,14 @@
     )
   )
 
-#! Converts string of info into actual symbol list
+#! Converts string of info into actual number list
 (define convert-info
   (lambda (line)
     (foldr get-nums '() (string-split (substring line 1 (- (string-length line) 1)) ","))
     )
   )
 
-#! Converst string of a number into a symbol
+#! Converst string of a number into number
 (define get-nums
   (lambda (input nums)
     (cons (string->number input) nums))
@@ -111,7 +118,7 @@
 #! -----------------------------------------------------------------------------
 #! -----------------------------------------------------------------------------
 
-
+#! Takes in NFA and starts to convert NFA starting with the initial state
 (define start-conversion
   (lambda (file)
     (let ([nfa (parser file)])
@@ -120,19 +127,18 @@
   )
   )
 
+#! NFA to DFA conversion
 (define convert
   (lambda (nfa dfa stack set_dict)
-   (if(empty? stack)  ; check, is stack empty? empty means, stack = '(), if so, return dfa that has been made pretty, else mark top of stack
+   (if(empty? stack)
          (transform-dfa nfa dfa set_dict)
     (let ([marked_moves (mark nfa (car stack))]) ;turn into a queue and move down it
       (let ([add_marks (add-marks-to-dict marked_moves set_dict)])
          (convert
                nfa
                (append dfa (list (cons (car stack) (list marked_moves))))
-               (update-queue stack add_marks) ;add new items to the queue while taking the item you just marked off
+               (update-queue stack add_marks)
                (append set_dict (generate-marks add_marks))
-               ; stack -> (pop stack), concat new sets retrieved rom marked_moves ("new" means, not in set_dict) -> if a on stack, pop a, mark a get b c from marking, push list on stack
-               ; set_dict -> new sets retrieved from marked_moves   
             )
         )
       )
@@ -140,9 +146,6 @@
     )
   )
   
-;need to think of way to check if not in dictionary and if not add to dictinary and to stack
-
-
 #! Finds the initial state of the NFA
 (define find-initial-state
   (lambda (nfa)
@@ -160,7 +163,7 @@
      
 
 
-#! Creates a list of moves not found in the set_dict
+#! Creates a list of moves not found in the set_dict from list given
 ;takes in list of lists '( () () )
 ;returns list of lists '( () () )
 (define add-marks-to-dict
@@ -190,8 +193,7 @@
 
 
 
-#! Mark is not already in dictoinary
-
+#! Checks if Mark is not already in dictoinary
  (define not-in-dict
    (lambda (move set)
      (andmap (lambda (set_item)
@@ -201,19 +203,15 @@
      )
    )
       
-  
+ #! Appends the NFA Info to the Converted DFA 
 (define transform-dfa
   (lambda (nfa dfa set_dict)
     (append (car nfa) dfa )
     )
   )
 
-  
-
-
 #! Marks the sets
 ; takes in a list of numbers '(2 3 4)
-;
 (define mark
   (lambda (nfa set)
     (foldr (lambda (alpha marking) 
@@ -239,7 +237,7 @@
   )
      
 
-#! Get all moves for states at particular alphabet letter
+#! Get all moves for state at particular alphabet letter
 (define get-moves
   (lambda (state_list nfa alpha)
     (remove-duplicates (foldr (lambda (state output)
@@ -267,8 +265,6 @@
     )
   )
 
-
-
 #! Checks to Mark in Table -- returns 0, if it doesn't exist
 (define check-e-closure
   (lambda (closure table)
@@ -281,39 +277,13 @@
   )
   )
 
-#! Compare E-Closure elements to make sure it doesn't exist in table
+#! Compares lists
 (define compare-lists
   (lambda (l1 l2)
     (equal? (sort l1 <) (sort l2 <))
     )
   )
-    
-         
-#! Adds E-Closure to the table and the Mark Associated with it
-(define build-table
-  (lambda (closure table)
-    (cons (cons (+ 1 (length table)) (list closure)) table)
-    )
-  )
-           
-; #! Converts a Number into a Symbol
-; (define number->symbol
-;   (lambda (num)
-;     (string->symbol(number->string num))
-;   )
-;  )
-;#! Converst list of the states into a Symbol
-; (define convert-list-to-symbol
-;   (lambda (l)
-;     (string->symbol (foldr (lambda (item string)
-;              (string-append string (symbol->string item))
-;              )
-;            "" l)
-;     )
-;   )
-;  )
-   
-#! (equal? (sort '(3 2 1 4 5) <) (sort '(2 1 3 4 5) <))
+  
 
 #! -----------------------------------------------------------------------------
 #! -----------------------------------------------------------------------------
@@ -330,22 +300,18 @@
 
 #! Construcs a dictionary for mark replacement
 ;takes in dfa returns list of pairs ( ((e-closure) new-mark) ... )
-
 (define final-dfa
   (lambda (file)
     (let ([dfa (start-conversion file)])
     (let ([fixed_dfa (append (take dfa 4) (check-dfa (cddddr dfa)))])
       ;fixed_dfa
       (let ([set_dict (build-set-dict (cddddr fixed_dfa) '() 1)])
+        (display (string-append "E-closure(IO) = " (list-to-string (caar set_dict))  " = 1\n"))
         (let ([final-dfa (print-transitions (cddddr fixed_dfa) set_dict)])
         (display (string-append "\nInitial State: " (number->string (cadar fixed_dfa))))
         (print-final-states (cadadr fixed_dfa) set_dict)
         (print-alpha (cadddr fixed_dfa))
         (print-table final-dfa)  
-          
-;        ;;print the final table -- use final dfa
-;        ;;use item from print transitions to populate final table
-;       ; )
      )
     )
       )
@@ -356,8 +322,18 @@
 #! Prints the DFA table
 (define print-table
   (lambda (dfa)
-    dfa)
+    (foldr (lambda (state str)
+             (display (string-append "\n" (number->string (car state)) "\t" (foldr (lambda (move s)
+                      (if (equal? (cdr move) 0)
+                          (string-append s "{ }\t")
+                          (string-append s "{" (number->string (cdr move))  "}\t")
+                      )
+                    ) "" (cadr state))) 
+                    )
+             ) "" (reverse dfa))
+           )
   )
+  
 
   
 #! Eliminates empty lists in dfa
@@ -386,9 +362,12 @@
 #! Prints the alphabet of the dfa
   (define print-alpha
     (lambda (alpha_list)
-      (display (string-append "\nStates: " 
+      (display (string-append "\nStates:  " 
                               (foldr (lambda (alpha str)
-                                       (string-append str "   " (symbol->string alpha))
+                                       (if (equal? alpha 'E)
+                                          (string-append str "")
+                                          (string-append str (symbol->string alpha) "\t ")
+                                          )
                                        ) "" (reverse (cadr alpha_list))
                                          )
                               )
@@ -409,10 +388,6 @@
       )
     )
              
-          
-          
-  
-  
  #! Print NFA to DFA Transitions
 (define print-transitions
   (lambda (dfa set_dict)
@@ -424,8 +399,7 @@
                       (print-full line move set_dict)
                       )
             ) (cadr line))
-           (convert-line line set_dict)
-           ;create a converted line that will be returned to final-dfa that will then be used to create the final table
+           (convert-line line set_dict) ;create a converted line that will be returned to final-dfa that will then be used to create the final table
            ) dfa )
     )
   )
@@ -454,15 +428,6 @@
     (display "\n")
     )
   )
-
-
-;
-;(define subst
-;  (lambda (line sect_dic)
-;    dfa ;will need to substitute all sect_dict values into this. then print-transitions will return the final dfa - then complete printer for final dfa
-;    )
-;  )
-
 
 #! Prints Mark 'x': statement
 (define print-mark
@@ -530,65 +495,11 @@
     )
   )
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 #! -----------------------------------------------------------------------------
 #! -----------------------------------------------------------------------------
 #! --------------------         END DFA PRINTING            --------------------
 #! -----------------------------------------------------------------------------
 #! -----------------------------------------------------------------------------
 
-
-
-   #!  (trace strings-to-list)
- #! (parser "/home/mteahan/Programming/EECS_665/Project1/test.txt")
- ;(e-closure (parser "/home/mteahan/Programming/EECS_665/Project1/test.txt") '(1))
-;(mark (parser "/home/mteahan/Programming/EECS_665/Project1/test.txt") '(2 3 9))
-;  (get-moves '(1 2 6) (parser "/home/mteahan/Programming/EECS_665/Project1/test.txt") 'a )
-;(moves '(1 2 6) (parser "/home/mteahan/Programming/EECS_665/Project1/test.txt") '() '())
-; (add-marks-to-dict '((b ((4 8 9 11) (4))) (a ((5 6 7 11) (4)))) '((b (3 9 10 11)) (a (4 8 90 11))))
-;(cadr (assoc '9 (parser "/home/mteahan/Programming/EECS_665/Project1/test.txt")))
-;(start-conversion "/home/mteahan/Programming/EECS_665/Project1/test.txt")
-;(build-set-dict '(((1 2 5) ((a ((3) (3))) (b ((6) (6)))))
-;  ((3) ((a (() ())) (b ((4 8 9 11) (4)))))
-;  ((6) ((a ((7 8 9 11) (7))) (b (() ()))))
-;  (() ((a (() ())) (b (() ()))))
-;  ((4 8 9 11) ((a ((9 10 11) (10))) (b (() ()))))
-;  ((7 8 9 11) ((a ((9 10 11) (10))) (b (() ()))))
-;  ((9 10 11) ((a ((9 10 11) (10))) (b (() ()))))) '() 1)
-
-;(print-mark '((1 2 5) ((a ((3) (3))) (b ((6) (6))))) '(((1 2 5) 1) ((3) 2) ((6) 3) ((4 8 9 11) 5) ((7 8 9 11) 6) ((9 10 11) 7)))
-;(list-to-string '(1 2 3 4))
-;
-;(print-transitions (check-dfa '(((1 2 5) ((a ((3) (3))) (b ((6) (6)))))
-;  ((3) ((a (() ())) (b ((4 8 9 11) (4)))))
-;  ((6) ((a ((7 8 9 11) (7))) (b (() ()))))
-;  (() ((a (() ())) (b (() ()))))
-;  ((4 8 9 11) ((a ((9 10 11) (10))) (b (() ()))))
-;  ((7 8 9 11) ((a ((9 10 11) (10))) (b (() ()))))
-;  ((9 10 11) ((a ((9 10 11) (10))) (b (() ()))))))
-;'(((1 2 5) 1) ((3) 2) ((6) 3) ((4 8 9 11) 5) ((7 8 9 11) 6) ((9 10 11) 7)))
-;
-;(check-dfa '(((1 2 5) ((a ((3) (3))) (b ((6) (6)))))
-;  ((3) ((a (() ())) (b ((4 8 9 11) (4)))))
-;  ((6) ((a ((7 8 9 11) (7))) (b (() ()))))
-;  (() ((a (() ())) (b (() ()))))
-;  ((4 8 9 11) ((a ((9 10 11) (10))) (b (() ()))))
-;  ((7 8 9 11) ((a ((9 10 11) (10))) (b (() ()))))
-;  ((9 10 11) ((a ((9 10 11) (10))) (b (() ()))))))
-
-
-;(print-final-states '( 1 9 3) '(((1 2 5) 1) ((3) 2) ((6) 3) ((4 8 9 11) 5) ((7 8 9 11) 6) ((9 10 11) 7)))
-
-(final-dfa "/home/mteahan/Programming/EECS_665/Project1/test.txt")
+#! Takes 'stdin and runs NFA to DFA Converter
+(final-dfa (read-lines 'stdin))
